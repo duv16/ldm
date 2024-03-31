@@ -449,6 +449,9 @@ device_get_mp (Device *dev, const char *base)
 				return NULL;
 
 		// Reuse the directory only if it's empty
+		// check if there is mounted dev at the mp????
+		// const char * mnt_point = mnt_get_mountpoint(MTAB_PATH);
+		// syslog(LOG_INFO, "mnt_point:%s", mnt_point);
 		dir = g_dir_open(mp, 0, NULL);
 		if (dir) {
 			// The directory is empty!
@@ -650,12 +653,17 @@ void
 on_udev_change (struct udev_device *udev)
 {
 	const char *type;
-
+	const char *fs_type;
+	const char *devtype;
+	
 	on_udev_remove(udev);
 
 	type = udev_get_prop(udev, "ID_TYPE");
+	devtype = udev_get_prop(udev, "DEVTYPE");
+	fs_type = udev_get_prop(udev, "ID_FS_TYPE");
+	syslog(LOG_INFO, "on_udev_change - type:%s, devtype:%s, fs_type:%s", type, devtype, fs_type);
 
-	if (!type)
+	if (!type || !strcmp(devtype, "partition"))
 		return;
 
 	// Exit if there's no media
@@ -1022,7 +1030,7 @@ main (int argc, char *argv[])
 				break;
 			case 'h':
 				printf("ldm "VERSION_STR"\n");
-				printf("2011-2019 (C) The Lemon Man\n");
+				printf("2011-2019 (C) The Lemon Man\nAdded the only one strcmp() by me)) in 2024\n");
 				printf("%s [-d | -r | -u | -p | -c | -m | -h]\n", argv[0]);
 				printf("\t-d Run ldm as a daemon\n");
 				printf("\t-u Specify the user\n");
