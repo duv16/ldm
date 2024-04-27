@@ -1,4 +1,4 @@
-VERSION=v0.7
+VERSION=v0.7.1
 VERSION_GIT=$(shell test -d .git && git describe 2> /dev/null)
 
 ifneq "$(VERSION_GIT)" ""
@@ -8,7 +8,7 @@ endif
 CC ?= gcc
 CFLAGS += -std=c99 \
           -D_GNU_SOURCE \
-          -Wall -Wunused-parameter -O2 \
+          -Wall -Wunused-parameter -Os \
           -DVERSION_STR="\"$(VERSION)\""
 CFDEBUG  = -g3 -pedantic -Wlong-long
 CFDEBUG += -Wsign-conversion -Wconversion -Wimplicit-function-declaration

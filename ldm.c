@@ -23,35 +23,35 @@
 #include "ipc.h"
 
 typedef enum {
-	VOLUME,
-	MAX,
+    VOLUME,
+    MAX,
 } VolumeType;
 
 typedef enum {
-	NONE      = 0x00,
-	OWNER_FIX = 0x01,
-	UTF8_FLAG = 0x02,
-	MASK      = 0x04,
-	FLUSH     = 0x08,
-	RO        = 0x10,
+    NONE      = 0x00,
+    OWNER_FIX = 0x01,
+    UTF8_FLAG = 0x02,
+    MASK      = 0x04,
+    FLUSH     = 0x08,
+    RO        = 0x10,
 } Quirk;
 
 typedef struct {
-	unsigned long fmask;
-	unsigned long dmask;
+    unsigned long fmask;
+    unsigned long dmask;
 } Mask;
 
 typedef struct {
-	VolumeType type;
-	char *node;
-	struct udev_device *dev;
-	char *mp; // The path to the mountpoint
-	char *fs; // The name of the filesystem
+    VolumeType type;
+    char *node;
+    struct udev_device *dev;
+    char *mp; // The path to the mountpoint
+    char *fs; // The name of the filesystem
 } Device;
 
 typedef struct {
-	char *name;
-	Quirk quirks;
+    char *name;
+    Quirk quirks;
 } FsQuirk;
 
 #define FSTAB_PATH  "/etc/fstab"
@@ -73,32 +73,32 @@ static GHashTable *g_dev_table;
 // Return the first non-NULL element among {a,b,c} or NULL
 // The values are evaluated only once and only if needed
 #define first_nonnull(a,b,c) \
-	({ __typeof__ (a) _a = (a);  \
-	   __typeof__ (b) _b = NULL; \
-	   __typeof__ (c) _c = NULL; \
-	   if (!_a)        _b = (b); \
-	   if (!_a && !_b) _c = (c); \
-	   _a ? _a : (_b ? _b : _c); })
+    ({ __typeof__ (a) _a = (a);  \
+        __typeof__ (b) _b = NULL; \
+        __typeof__ (c) _c = NULL; \
+        if (!_a)        _b = (b); \
+        if (!_a && !_b) _c = (c); \
+        _a ? _a : (_b ? _b : _c); })
 
 char *
 udev_get_prop (struct udev_device *dev, const char *key)
 {
-	const char *value = udev_device_get_property_value(dev, key);
-	return (char *)value;
+    const char *value = udev_device_get_property_value (dev, key);
+    return (char *)value;
 }
 
 int
 udev_prop_true (struct udev_device *dev, const char *key)
 {
-	const char *value = udev_device_get_property_value(dev, key);
-	return value && !strcmp(value, "1");
+    const char *value = udev_device_get_property_value (dev, key);
+    return value && !strcmp (value, "1");
 }
 
 int
 udev_attr_true (struct udev_device *dev, const char *key)
 {
-	const char *value = udev_device_get_sysattr_value(dev, key);
-	return value && !strcmp(value, "1");
+    const char *value = udev_device_get_sysattr_value (dev, key);
+    return value && !strcmp (value, "1");
 }
 
 // Locking functions
@@ -106,15 +106,18 @@ udev_attr_true (struct udev_device *dev, const char *key)
 int
 lock_create (int pid)
 {
-	FILE *fp;
+    FILE *fp;
 
-	fp = fopen(LOCK_PATH, "w+");
-	if (!fp)
-		return 0;
-	fprintf(fp, "%d", pid);
-	fclose(fp);
+    fp = fopen (LOCK_PATH, "w+");
 
-	return 1;
+    if (!fp) {
+        return 0;
+    }
+
+    fprintf (fp, "%d", pid);
+    fclose (fp);
+
+    return 1;
 }
 
 // Spawn helper
@@ -122,483 +125,534 @@ lock_create (int pid)
 int
 spawn_callback (char *action, Device *dev)
 {
-	int ret;
-	pid_t child_pid;
-	char **env;
-	unsigned env_count;
+    int ret;
+    pid_t child_pid;
+    char **env;
+    unsigned env_count;
 
-	// No callback registered, we're done
-	if (!g_callback_cmd)
-		return 0;
+    // No callback registered, we're done
+    if (!g_callback_cmd) {
+        return 0;
+    }
 
-	child_pid = fork();
+    child_pid = fork();
 
-	if (child_pid < 0)
-		return 1;
+    if (child_pid < 0) {
+        return 1;
+    }
 
-	if (child_pid > 0) {
-		// Wait for the process to return
-		wait(&ret);
+    if (child_pid > 0) {
+        // Wait for the process to return
+        wait (&ret);
 
-		// Return the exit code or EXIT_FAILURE if something went wrong
-		return WIFEXITED(ret) ? WEXITSTATUS(ret) : EXIT_FAILURE;
-	}
+        // Return the exit code or EXIT_FAILURE if something went wrong
+        return WIFEXITED (ret) ? WEXITSTATUS (ret) : EXIT_FAILURE;
+    }
 
-	env_count = g_strv_length(environ);
-	env = malloc((env_count + 5) * sizeof(char *));
+    env_count = g_strv_length (environ);
+    env = malloc ((env_count + 5) * sizeof (char *));
 
-	if (!env)
-		return 0;
+    if (!env) {
+        return 0;
+    }
 
-	// Copy the parent's environment
-	for (int i = 0; i < env_count; i++)
-		env[i] = environ[i];
+    // Copy the parent's environment
+    for (int i = 0; i < env_count; i++) {
+        env[i] = environ[i];
+    }
 
-	// Inject the ldm-specific variables
-	env[env_count]   = g_strdup_printf("LDM_ACTION=%s", action);
-	env[env_count+1] = g_strdup_printf("LDM_NODE=%s", dev->node);
-	env[env_count+2] = g_strdup_printf("LDM_MOUNTPOINT=%s", dev->mp);
-	env[env_count+3] = g_strdup_printf("LDM_FS=%s", dev->fs);
-	env[env_count+4] = NULL;
+    // Inject the ldm-specific variables
+    env[env_count]   = g_strdup_printf ("LDM_ACTION=%s", action);
+    env[env_count + 1] = g_strdup_printf ("LDM_NODE=%s", dev->node);
+    env[env_count + 2] = g_strdup_printf ("LDM_MOUNTPOINT=%s", dev->mp);
+    env[env_count + 3] = g_strdup_printf ("LDM_FS=%s", dev->fs);
+    env[env_count + 4] = NULL;
 
-	// Drop the root priviledges. Oh and the bass too.
-	if (setgid(g_gid) < 0 || setuid(g_uid) < 0) {
-		_Exit(EXIT_FAILURE);
-	}
+    // Drop the root priviledges. Oh and the bass too.
+    if (setgid (g_gid) < 0 || setuid (g_uid) < 0) {
+        _Exit (EXIT_FAILURE);
+    }
 
-	close(STDIN_FILENO);
-	close(STDOUT_FILENO);
-	close(STDERR_FILENO);
+    close (STDIN_FILENO);
+    close (STDOUT_FILENO);
+    close (STDERR_FILENO);
 
-	char * const cmdline[] = {
-		"/bin/sh",
-		"-c", g_callback_cmd,
-		NULL
-	};
-	execve(cmdline[0], cmdline, env);
+    char *const cmdline[] = {
+        "/bin/sh",
+        "-c", g_callback_cmd,
+        NULL
+    };
+    execve (cmdline[0], cmdline, env);
 
-	// Should never reach this
-	syslog(LOG_ERR, "Could not execute \"%s\"", g_callback_cmd);
-	// Die
-	_Exit(EXIT_FAILURE);
+    // Should never reach this
+    syslog (LOG_ERR, "Could not execute \"%s\"", g_callback_cmd);
+    // Die
+    _Exit (EXIT_FAILURE);
 }
 
 // Convenience function for fstab handling
 
 enum {
-	NODE,
-	UUID,
-	LABEL,
+    NODE,
+    UUID,
+    LABEL,
 };
 
 struct libmnt_fs *
 table_search_by_str (struct libmnt_table *tbl, int type, char *str)
 {
-	struct libmnt_fs *fs;
+    struct libmnt_fs *fs;
 
-	if (!tbl || !str)
-		return NULL;
+    if (!tbl || !str) {
+        return NULL;
+    }
 
-	switch (type) {
-		case NODE:
-			fs = mnt_table_find_source(tbl, str, MNT_ITER_FORWARD);
-			break;
-		case UUID:
-			fs = mnt_table_find_tag(tbl, "UUID", str, MNT_ITER_FORWARD);
-			break;
-		case LABEL:
-			fs = mnt_table_find_tag(tbl, "LABEL", str, MNT_ITER_FORWARD);
-			break;
-		default:
-			return NULL;
-	}
+    switch (type) {
+        case NODE:
+            fs = mnt_table_find_source (tbl, str, MNT_ITER_FORWARD);
+            break;
 
-	return fs;
+        case UUID:
+            fs = mnt_table_find_tag (tbl, "UUID", str, MNT_ITER_FORWARD);
+            break;
+
+        case LABEL:
+            fs = mnt_table_find_tag (tbl, "LABEL", str, MNT_ITER_FORWARD);
+            break;
+
+        default:
+            return NULL;
+    }
+
+    return fs;
 }
 
 struct libmnt_fs *
 table_search_by_dev (struct libmnt_table *tbl, Device *dev)
 {
-	// Try to find a match against the device node name, the uuid and the
-	// label in this order
-	return first_nonnull(
-		table_search_by_str(tbl, NODE, dev->node),
-		table_search_by_str(tbl, UUID, udev_get_prop(dev->dev, "ID_FS_UUID")),
-		table_search_by_str(tbl, LABEL, udev_get_prop(dev->dev, "ID_FS_LABEL"))
-	);
+    // Try to find a match against the device node name, the uuid and the
+    // label in this order
+    return first_nonnull (
+               table_search_by_str (tbl, NODE, dev->node),
+               table_search_by_str (tbl, UUID, udev_get_prop (dev->dev, "ID_FS_UUID")),
+               table_search_by_str (tbl, LABEL, udev_get_prop (dev->dev, "ID_FS_LABEL"))
+           );
 }
 
 struct libmnt_fs *
 table_search_by_udev (struct libmnt_table *tbl, struct udev_device *udev)
 {
-	struct libmnt_fs *fs;
-	char *resolved;
+    struct libmnt_fs *fs;
+    char *resolved;
 
-	resolved = mnt_resolve_path(udev_device_get_devnode(udev), NULL);
+    resolved = mnt_resolve_path (udev_device_get_devnode (udev), NULL);
 
-	fs = first_nonnull(
-		table_search_by_str(tbl, NODE, resolved),
-		table_search_by_str(tbl, UUID, udev_get_prop(udev, "ID_FS_UUID")),
-		table_search_by_str(tbl, LABEL, udev_get_prop(udev, "ID_FS_LABEL"))
-	);
+    fs = first_nonnull (
+             table_search_by_str (tbl, NODE, resolved),
+             table_search_by_str (tbl, UUID, udev_get_prop (udev, "ID_FS_UUID")),
+             table_search_by_str (tbl, LABEL, udev_get_prop (udev, "ID_FS_LABEL"))
+         );
 
-	free(resolved);
+    free (resolved);
 
-	return fs;
+    return fs;
 }
 
 int
 fstab_has_option (struct udev_device *udev, const char *option)
 {
-	struct libmnt_fs *fs;
+    struct libmnt_fs *fs;
 
-	if (!udev || !option)
-		return 0;
+    if (!udev || !option) {
+        return 0;
+    }
 
-	fs = table_search_by_udev(g_fstab, udev);
-	if (!fs)
-		return 0;
+    fs = table_search_by_udev (g_fstab, udev);
 
-	return mnt_fs_match_options(fs, option);
+    if (!fs) {
+        return 0;
+    }
+
+    return mnt_fs_match_options (fs, option);
 }
 
 unsigned int
 fs_get_quirks (char *fs)
 {
-	static const FsQuirk fs_table [] = {
-		{ "msdos" , OWNER_FIX | UTF8_FLAG },
-		{ "umsdos", OWNER_FIX | UTF8_FLAG },
-		{ "vfat",   OWNER_FIX | UTF8_FLAG | MASK | FLUSH },
-		{ "exfat",  OWNER_FIX },
-		{ "ntfs",   OWNER_FIX | UTF8_FLAG | MASK },
-		{ "iso9660",OWNER_FIX | UTF8_FLAG | RO },
-		{ "udf",    OWNER_FIX | RO },
-	};
+    static const FsQuirk fs_table [] = {
+        { "msdos", OWNER_FIX | UTF8_FLAG },
+        { "umsdos", OWNER_FIX | UTF8_FLAG },
+        { "vfat",   OWNER_FIX | UTF8_FLAG | MASK | FLUSH },
+        { "exfat",  OWNER_FIX },
+        { "ntfs",   OWNER_FIX | UTF8_FLAG | MASK },
+        { "iso9660", OWNER_FIX | UTF8_FLAG | RO },
+        { "udf",    OWNER_FIX | RO },
+    };
 
-	for (int i = 0; i < sizeof(fs_table)/sizeof(FsQuirk); i++) {
-		if (!strcmp(fs_table[i].name, fs))
-			return fs_table[i].quirks;
-	}
+    for (int i = 0; i < sizeof (fs_table) / sizeof (FsQuirk); i++) {
+        if (!strcmp (fs_table[i].name, fs)) {
+            return fs_table[i].quirks;
+        }
+    }
 
-	return NONE;
+    return NONE;
 }
 
 int
 mnt_context_rc_value (struct libmnt_context *ctx, int rc)
 {
-	// Return the /sbin/umount.<type> helper return code.
-	if (mnt_context_helper_executed(ctx)) {
-		int helper_rc = mnt_context_get_helper_status(ctx);
-		syslog(LOG_INFO, "Mount helper returned code %d", helper_rc);
-		return (helper_rc != 0);
-	}
+    // Return the /sbin/umount.<type> helper return code.
+    if (mnt_context_helper_executed (ctx)) {
+        int helper_rc = mnt_context_get_helper_status (ctx);
+        syslog (LOG_INFO, "Mount helper returned code %d", helper_rc);
+        return (helper_rc != 0);
+    }
 
-	// The library and the syscall succeeded just fine.
-	if (!rc && mnt_context_get_status(ctx) == 1)
-		return 0;
+    // The library and the syscall succeeded just fine.
+    if (!rc && mnt_context_get_status (ctx) == 1) {
+        return 0;
+    }
 
-	if (!mnt_context_syscall_called(ctx))
-		syslog(LOG_ERR, "Error in libmount (rc = %d)", rc);
-	else {
-		int syscall_errno = mnt_context_get_syscall_errno(ctx);
-		syslog(LOG_ERR, "Error in syscall (%s)", syscall_errno?
-		       strerror(syscall_errno): "Generic error");
-	}
+    if (!mnt_context_syscall_called (ctx)) {
+        syslog (LOG_ERR, "Error in libmount (rc = %d)", rc);
+    }
+    else {
+        int syscall_errno = mnt_context_get_syscall_errno (ctx);
+        syslog (LOG_ERR, "Error in syscall (%s)", syscall_errno ?
+                strerror (syscall_errno) : "Generic error");
+    }
 
-	return 1;
+    return 1;
 }
 
 int
 device_find_predicate (char *key, Device *value, char *what)
 {
-	(void)key;
+    (void)key;
 
-	// Try to match the resolved node or the mountpoint name
-	if (!strcmp(value->node, what))
-		return 1;
-	if (value->type == VOLUME && !strcmp(value->mp, what))
-		return 1;
+    // Try to match the resolved node or the mountpoint name
+    if (!strcmp (value->node, what)) {
+        return 1;
+    }
 
-	return 0;
+    if (value->type == VOLUME && !strcmp (value->mp, what)) {
+        return 1;
+    }
+
+    return 0;
 }
 
 // Path is either the /dev/ node or the mountpoint
 Device *
 device_search (const char *path)
 {
-	Device *dev;
+    Device *dev;
 
-	if (!path || !path[0])
-		return NULL;
+    if (!path || !path[0]) {
+        return NULL;
+    }
 
-	// This is the fast path, let's just hope it's a /dev/ node
-	dev = g_hash_table_lookup(g_dev_table, path);
+    // This is the fast path, let's just hope it's a /dev/ node
+    dev = g_hash_table_lookup (g_dev_table, path);
 
-	if (!dev)
-		dev = g_hash_table_find(g_dev_table, (GHRFunc)device_find_predicate, (gpointer)path);
+    if (!dev) {
+        dev = g_hash_table_find (g_dev_table, (GHRFunc)device_find_predicate, (gpointer)path);
+    }
 
-	return dev;
+    return dev;
 }
 
 int
 device_has_media (struct udev_device *udev)
 {
-	const char *dev_node;
-	int fd;
+    const char *dev_node;
+    int fd;
 
-	if (!udev)
-		return 0;
+    if (!udev) {
+        return 0;
+    }
 
-	// Fast path, the device always have something in it
-	if (!udev_attr_true(udev, "removable"))
-		return 1;
+    // Fast path, the device always have something in it
+    if (!udev_attr_true (udev, "removable")) {
+        return 1;
+    }
 
-	if (udev_get_prop(udev, "ID_CDROM"))
-		return udev_prop_true(udev, "ID_CDROM_MEDIA");
+    if (udev_get_prop (udev, "ID_CDROM")) {
+        return udev_prop_true (udev, "ID_CDROM_MEDIA");
+    }
 
-	dev_node = udev_device_get_devnode(udev);
-	fd = open(dev_node, O_RDONLY);
-	if (fd < 0)
-		return 0;
-	close(fd);
+    dev_node = udev_device_get_devnode (udev);
+    fd = open (dev_node, O_RDONLY);
 
-	return 1;
+    if (fd < 0) {
+        return 0;
+    }
+
+    close (fd);
+
+    return 1;
 }
 
 void
 device_free (Device *dev)
 {
-	if (!dev)
-		return;
+    if (!dev) {
+        return;
+    }
 
-	free(dev->node);
-	udev_device_unref(dev->dev);
+    free (dev->node);
+    udev_device_unref (dev->dev);
 
-	switch (dev->type) {
-		case VOLUME:
-			free(dev->mp);
-			free(dev->fs);
-			break;
+    switch (dev->type) {
+        case VOLUME:
+            free (dev->mp);
+            free (dev->fs);
+            break;
 
-		default:
-			break;
-	}
+        default:
+            break;
+    }
 
-	free(dev);
+    free (dev);
 }
 
 Device *
 device_new (struct udev_device *udev)
 {
-	const char *dev_node, *dev_fs, *dev_fs_usage;
-	Device *dev;
+    const char *dev_node, *dev_fs, *dev_fs_usage;
+    Device *dev;
 
-	if (!udev)
-		return NULL;
+    if (!udev) {
+        return NULL;
+    }
 
-	if (!device_has_media(udev))
-		return NULL;
+    if (!device_has_media (udev)) {
+        return NULL;
+    }
 
-	dev_node = udev_device_get_devnode(udev);
-	dev_fs = udev_get_prop(udev, "ID_FS_TYPE");
-	dev_fs_usage = udev_get_prop(udev, "ID_FS_USAGE");
+    dev_node = udev_device_get_devnode (udev);
+    dev_fs = udev_get_prop (udev, "ID_FS_TYPE");
+    dev_fs_usage = udev_get_prop (udev, "ID_FS_USAGE");
 
-	if (!dev_fs || !dev_fs_usage)
-		return NULL;
+    if (!dev_fs || !dev_fs_usage) {
+        return NULL;
+    }
 
-	if (strcmp(dev_fs_usage, "filesystem"))
-		return NULL;
+    if (strcmp (dev_fs_usage, "filesystem")) {
+        return NULL;
+    }
 
-	dev = calloc(1, sizeof(Device));
+    dev = calloc (1, sizeof (Device));
 
-	dev->type = VOLUME;
-	dev->dev = udev;
-	dev->node = mnt_resolve_path(dev_node, NULL);
-	dev->fs = strdup(dev_fs);
+    dev->type = VOLUME;
+    dev->dev = udev;
+    dev->node = mnt_resolve_path (dev_node, NULL);
+    dev->fs = strdup (dev_fs);
 
-	udev_device_ref(udev);
+    udev_device_ref (udev);
 
-	return dev;
+    return dev;
 }
 
 char *
 device_get_mp (Device *dev, const char *base)
 {
-	char *unique;
-	char mp[4096];
-	GDir *dir;
+    char *unique;
+    char mp[4096];
+    GDir *dir;
 
-	if (!dev || !base)
-		return NULL;
+    if (!dev || !base) {
+        return NULL;
+    }
 
-	// Use the first non-null field
-	unique = first_nonnull(udev_get_prop(dev->dev, "ID_FS_LABEL"),
-			       udev_get_prop(dev->dev, "ID_FS_UUID"),
-			       udev_get_prop(dev->dev, "ID_SERIAL"));
+    // Use the first non-null field
+    unique = first_nonnull (udev_get_prop (dev->dev, "ID_FS_LABEL"),
+                            udev_get_prop (dev->dev, "ID_FS_UUID"),
+                            udev_get_prop (dev->dev, "ID_SERIAL"));
 
-	if (!unique)
-		return NULL;
+    if (!unique) {
+        return NULL;
+    }
 
-	if (snprintf(mp, sizeof(mp), "%s/%s", base, unique) < 0)
-		return NULL;
+    if (snprintf (mp, sizeof (mp), "%s/%s", base, unique) < 0) {
+        return NULL;
+    }
 
-	// If the mountpoint we've come up with already exists try to find a good one by appending '_'
-	while (g_file_test(mp, G_FILE_TEST_EXISTS)) {
-		// We tried hard and failed
-		if (strlen(mp) == sizeof(mp) - 2)
-				return NULL;
+    // If the mountpoint we've come up with already exists try to find a good one by appending '_'
+    while (g_file_test (mp, G_FILE_TEST_EXISTS)) {
+        // We tried hard and failed
+        if (strlen (mp) == sizeof (mp) - 2) {
+            return NULL;
+        }
 
-		// Reuse the directory only if it's empty
-		// check if there is mounted dev at the mp????
-		// const char * mnt_point = mnt_get_mountpoint(MTAB_PATH);
-		// syslog(LOG_INFO, "mnt_point:%s", mnt_point);
-		dir = g_dir_open(mp, 0, NULL);
-		if (dir) {
-			// The directory is empty!
-			// Note for the reader : 'g_dir_read_name' omits '.' and '..'
-			if (!g_dir_read_name(dir)) {
-				g_dir_close(dir);
-				break;
-			}
+        // Reuse the directory only if it's empty
+        // check if there is mounted dev at the mp????
+        // const char * mnt_point = mnt_get_mountpoint(MTAB_PATH);
+        // syslog(LOG_INFO, "mnt_point:%s", mnt_point);
+        dir = g_dir_open (mp, 0, NULL);
 
-			g_dir_close(dir);
-		}
+        if (dir) {
+            // The directory is empty!
+            // Note for the reader : 'g_dir_read_name' omits '.' and '..'
+            if (!g_dir_read_name (dir)) {
+                g_dir_close (dir);
+                break;
+            }
 
-		// Directory not empty, append a '_'
-		strcat(mp, "_");
-	}
+            g_dir_close (dir);
+        }
 
-	return strdup(mp);
+        // Directory not empty, append a '_'
+        strcat (mp, "_");
+    }
+
+    return strdup (mp);
 }
 
 int
 device_mount (Device *dev)
 {
-	char *mp;
-	unsigned int fs_quirks;
-	char opt_fmt[256] = {0};
-	struct libmnt_context *ctx;
-	struct libmnt_fs *fstab;
-	int rc;
+    char *mp;
+    unsigned int fs_quirks;
+    char opt_fmt[256] = {0};
+    struct libmnt_context *ctx;
+    struct libmnt_fs *fstab;
+    int rc;
 
-	if (!dev)
-		return 0;
+    if (!dev) {
+        return 0;
+    }
 
-	fstab = table_search_by_dev(g_fstab, dev);
+    fstab = table_search_by_dev (g_fstab, dev);
 
-	if (fstab && mnt_fs_get_target(fstab))
-		mp = strdup(mnt_fs_get_target(fstab));
-	else
-		mp = device_get_mp(dev, g_mount_path);
+    if (fstab && mnt_fs_get_target (fstab)) {
+        mp = strdup (mnt_fs_get_target (fstab));
+    }
+    else {
+        mp = device_get_mp (dev, g_mount_path);
+    }
 
-	if (!mp)
-		return 0;
+    if (!mp) {
+        return 0;
+    }
 
-	if (!g_file_test(mp, G_FILE_TEST_EXISTS)) {
-		// Create the mountpoint folder only if it's not already present
-		if (mkdir(mp, 775) < 0) {
-			syslog(LOG_ERR, "Could not mkdir() the folder at %s (%s)", mp, strerror(errno));
-			return 0;
-		}
-	}
+    if (!g_file_test (mp, G_FILE_TEST_EXISTS)) {
+        // Create the mountpoint folder only if it's not already present
+        if (mkdir (mp, 775) < 0) {
+            syslog (LOG_ERR, "Could not mkdir() the folder at %s (%s)", mp, strerror (errno));
+            return 0;
+        }
+    }
 
-	// Set 'mp' as the mountpoint for the device
-	dev->mp = mp;
+    // Set 'mp' as the mountpoint for the device
+    dev->mp = mp;
 
-	fs_quirks = fs_get_quirks(dev->fs);
+    fs_quirks = fs_get_quirks (dev->fs);
 
-	// Apply the needed quirks
-	if (fs_quirks != NONE) {
-		char *p = opt_fmt;
-		// Microsoft filesystems and filesystems used on optical
-		// discs require the gid and uid to be passed as mount
-		// arguments to allow the user to read and write, while
-		// posix filesystems just need a chown after being mounted
-		if (fs_quirks & OWNER_FIX)
-			p += sprintf(p, "uid=%i,gid=%i,", g_uid, g_gid);
-		if (fs_quirks & UTF8_FLAG)
-			p += sprintf(p, "utf8,");
-		if (fs_quirks & FLUSH)
-			p += sprintf(p, "flush,");
-		if (fs_quirks & MASK)
-			p += sprintf(p, "dmask=%04lo,fmask=%04lo,", g_mask.dmask, g_mask.fmask);
+    // Apply the needed quirks
+    if (fs_quirks != NONE) {
+        char *p = opt_fmt;
 
-		*p = '\0';
-	}
+        // Microsoft filesystems and filesystems used on optical
+        // discs require the gid and uid to be passed as mount
+        // arguments to allow the user to read and write, while
+        // posix filesystems just need a chown after being mounted
+        if (fs_quirks & OWNER_FIX) {
+            p += sprintf (p, "uid=%i,gid=%i,", g_uid, g_gid);
+        }
 
-	// Take a deep breath and don't panic!
-	// The buffer is big enough to accomodate the content.
-	strcat(opt_fmt, "uhelper=ldm");
+        if (fs_quirks & UTF8_FLAG) {
+            p += sprintf (p, "utf8,");
+        }
 
-	ctx = mnt_new_context();
+        if (fs_quirks & FLUSH) {
+            p += sprintf (p, "flush,");
+        }
 
-	mnt_context_set_fstype(ctx, dev->fs);
-	mnt_context_set_source(ctx, dev->node);
-	mnt_context_set_target(ctx, dev->mp);
-	mnt_context_set_options(ctx, opt_fmt);
+        if (fs_quirks & MASK) {
+            p += sprintf (p, "dmask=%04lo,fmask=%04lo,", g_mask.dmask, g_mask.fmask);
+        }
 
-	if (fs_quirks & RO)
-		mnt_context_set_mflags(ctx, MS_RDONLY);
+        *p = '\0';
+    }
 
-	rc = mnt_context_mount(ctx);
-	rc = mnt_context_rc_value(ctx, rc);
+    // Take a deep breath and don't panic!
+    // The buffer is big enough to accomodate the content.
+    strcat (opt_fmt, "uhelper=ldm");
 
-	if (rc) {
-		syslog(LOG_ERR, "Error while mounting %s", dev->node);
+    ctx = mnt_new_context();
 
-		mnt_free_context(ctx);
-		rmdir(dev->mp);
-		return 0;
-	}
+    mnt_context_set_fstype (ctx, dev->fs);
+    mnt_context_set_source (ctx, dev->node);
+    mnt_context_set_target (ctx, dev->mp);
+    mnt_context_set_options (ctx, opt_fmt);
 
-	mnt_free_context(ctx);
+    if (fs_quirks & RO) {
+        mnt_context_set_mflags (ctx, MS_RDONLY);
+    }
 
-	if (!(fs_quirks & OWNER_FIX)) {
-		if (chown(dev->mp, g_uid, g_gid) < 0) {
-			syslog(LOG_ERR, "Cannot chown %s", dev->mp);
-			return 0;
-		}
-	}
+    rc = mnt_context_mount (ctx);
+    rc = mnt_context_rc_value (ctx, rc);
 
-	(void)spawn_callback("mount", dev);
+    if (rc) {
+        syslog (LOG_ERR, "Error while mounting %s", dev->node);
 
-	return 1;
+        mnt_free_context (ctx);
+        rmdir (dev->mp);
+        return 0;
+    }
+
+    mnt_free_context (ctx);
+
+    if (! (fs_quirks & OWNER_FIX)) {
+        if (chown (dev->mp, g_uid, g_gid) < 0) {
+            syslog (LOG_ERR, "Cannot chown %s", dev->mp);
+            return 0;
+        }
+    }
+
+    (void)spawn_callback ("mount", dev);
+
+    return 1;
 }
 
 int
 device_unmount (Device *dev)
 {
-	struct libmnt_context *ctx;
-	int rc;
+    struct libmnt_context *ctx;
+    int rc;
 
-	if (!dev)
-		return 0;
+    if (!dev) {
+        return 0;
+    }
 
-	// Unmount the device if it is actually mounted
-	if (!table_search_by_dev(g_mtab, dev))
-		return 0;
+    // Unmount the device if it is actually mounted
+    if (!table_search_by_dev (g_mtab, dev)) {
+        return 0;
+    }
 
-	(void)spawn_callback("pre_unmount", dev);
+    (void)spawn_callback ("pre_unmount", dev);
 
-	ctx = mnt_new_context();
-	mnt_context_set_target(ctx, dev->node);
+    ctx = mnt_new_context();
+    mnt_context_set_target (ctx, dev->node);
 
-	rc = mnt_context_umount(ctx);
-	rc = mnt_context_rc_value(ctx, rc);
+    rc = mnt_context_umount (ctx);
+    rc = mnt_context_rc_value (ctx, rc);
 
-	if (rc) {
-		syslog(LOG_ERR, "Error while unmounting %s", dev->node);
+    if (rc) {
+        syslog (LOG_ERR, "Error while unmounting %s", dev->node);
 
-		mnt_free_context(ctx);
-		return 0;
-	}
-	mnt_free_context(ctx);
+        mnt_free_context (ctx);
+        return 0;
+    }
 
-	rmdir(dev->mp);
+    mnt_free_context (ctx);
 
-	(void)spawn_callback("unmount", dev);
+    rmdir (dev->mp);
 
-	return 1;
+    (void)spawn_callback ("unmount", dev);
+
+    return 1;
 }
 
 // udev action callbacks
@@ -606,643 +660,699 @@ device_unmount (Device *dev)
 void
 on_udev_add (struct udev_device *udev)
 {
-	Device *dev;
-	const char *dev_node;
+    Device *dev;
+    const char *dev_node;
 
-	dev_node = udev_device_get_devnode(udev);
+    dev_node = udev_device_get_devnode (udev);
 
-	// libmount < 2.21 doesn't support '+noauto', using 'noauto' instead
-	const char *noauto_opt = mnt_parse_version_string(LIBMOUNT_VERSION) < 2210 ? "noauto" : "+noauto";
-	if (fstab_has_option(udev, noauto_opt))
-		return;
+    // libmount < 2.21 doesn't support '+noauto', using 'noauto' instead
+    const char *noauto_opt = mnt_parse_version_string (LIBMOUNT_VERSION) < 2210 ? "noauto" : "+noauto";
 
-	dev = device_new(udev);
-	if (!dev) {
-		return;
-	}
+    if (fstab_has_option (udev, noauto_opt)) {
+        return;
+    }
 
-	if (!device_mount(dev)) {
-		fprintf(stderr, "device_mount()\n");
-		return;
-	}
+    dev = device_new (udev);
 
-	g_hash_table_insert(g_dev_table, (char *)dev_node, dev);
+    if (!dev) {
+        return;
+    }
+
+    if (!device_mount (dev)) {
+        fprintf (stderr, "device_mount()\n");
+        return;
+    }
+
+    g_hash_table_insert (g_dev_table, (char *)dev_node, dev);
 }
 
 void
 on_udev_remove (struct udev_device *udev)
 {
-	Device *dev;
-	const char *dev_node;
+    Device *dev;
+    const char *dev_node;
 
-	dev_node = udev_device_get_devnode(udev);
+    dev_node = udev_device_get_devnode (udev);
 
-	dev = g_hash_table_lookup(g_dev_table, dev_node);
-	if (!dev)
-		return;
+    dev = g_hash_table_lookup (g_dev_table, dev_node);
 
-	if (!device_unmount(dev)) {
-		fprintf(stderr, "device_unmount()");
-		return;
-	}
+    if (!dev) {
+        return;
+    }
 
-	g_hash_table_remove(g_dev_table, dev_node);
+    if (!device_unmount (dev)) {
+        fprintf (stderr, "device_unmount()");
+        return;
+    }
+
+    g_hash_table_remove (g_dev_table, dev_node);
 }
 
 void
 on_udev_change (struct udev_device *udev)
 {
-	const char *type;
-	const char *fs_type;
-	const char *devtype;
-	
-	on_udev_remove(udev);
+    const char *type;
+    const char *fs_type;
+    const char *devtype;
 
-	type = udev_get_prop(udev, "ID_TYPE");
-	devtype = udev_get_prop(udev, "DEVTYPE");
-	fs_type = udev_get_prop(udev, "ID_FS_TYPE");
-	syslog(LOG_INFO, "on_udev_change - type:%s, devtype:%s, fs_type:%s", type, devtype, fs_type);
+    on_udev_remove (udev);
 
-	if (!type || !strcmp(devtype, "partition"))
-		return;
+    type = udev_get_prop (udev, "ID_TYPE");
+    devtype = udev_get_prop (udev, "DEVTYPE");
+    fs_type = udev_get_prop (udev, "ID_FS_TYPE");
+    syslog (LOG_INFO, "on_udev_change - type:%s, devtype:%s, fs_type:%s", type, devtype, fs_type);
 
-	// Exit if there's no media
-	if (!device_has_media(udev))
-		return;
+    if (!type || !strcmp (devtype, "partition")) {
+        return;
+    }
 
-	on_udev_add(udev);
+    // Exit if there's no media
+    if (!device_has_media (udev)) {
+        return;
+    }
+
+    on_udev_add (udev);
 }
 
 void
 on_mtab_change (void)
 {
-	struct libmnt_table *new_tab;
-	struct libmnt_tabdiff *diff;
-	struct libmnt_fs *old, *new;
-	struct libmnt_iter *it;
-	Device *dev;
-	int change_type;
+    struct libmnt_table *new_tab;
+    struct libmnt_tabdiff *diff;
+    struct libmnt_fs *old, *new;
+    struct libmnt_iter *it;
+    Device *dev;
+    int change_type;
 
-	new_tab = mnt_new_table_from_file(MTAB_PATH);
-	if (!new_tab) {
-		fprintf(stderr, "Could not parse %s\n", MTAB_PATH);
-		return;
-	}
+    new_tab = mnt_new_table_from_file (MTAB_PATH);
 
-	diff = mnt_new_tabdiff();
-	if (!diff) {
-		fprintf(stderr, "Could not diff the mtab\n");
-		mnt_free_table(new_tab);
-		return;
-	}
+    if (!new_tab) {
+        fprintf (stderr, "Could not parse %s\n", MTAB_PATH);
+        return;
+    }
 
-	if (mnt_diff_tables(diff, g_mtab, new_tab) < 0) {
-		fprintf(stderr, "Could not diff the mtab\n");
-		mnt_free_table(new_tab);
-		mnt_free_tabdiff(diff);
-		return;
-	}
+    diff = mnt_new_tabdiff();
 
-	it = mnt_new_iter(MNT_ITER_BACKWARD);
+    if (!diff) {
+        fprintf (stderr, "Could not diff the mtab\n");
+        mnt_free_table (new_tab);
+        return;
+    }
 
-	while (!mnt_tabdiff_next_change(diff, it, &new, &old, &change_type)) {
-		switch (change_type) {
-			case MNT_TABDIFF_UMOUNT:
-				dev = device_search(mnt_fs_get_source(new));
+    if (mnt_diff_tables (diff, g_mtab, new_tab) < 0) {
+        fprintf (stderr, "Could not diff the mtab\n");
+        mnt_free_table (new_tab);
+        mnt_free_tabdiff (diff);
+        return;
+    }
 
-				if (dev) {
-					const char *ht_key = udev_device_get_devnode(dev->dev);
+    it = mnt_new_iter (MNT_ITER_BACKWARD);
 
-					g_hash_table_remove(g_dev_table, ht_key);
-				}
+    while (!mnt_tabdiff_next_change (diff, it, &new, &old, &change_type)) {
+        switch (change_type) {
+            case MNT_TABDIFF_UMOUNT:
+                dev = device_search (mnt_fs_get_source (new));
 
-				break;
+                if (dev) {
+                    const char *ht_key = udev_device_get_devnode (dev->dev);
 
-			case MNT_TABDIFF_REMOUNT:
-			case MNT_TABDIFF_MOVE:
-				dev = device_search(mnt_fs_get_source(old));
+                    g_hash_table_remove (g_dev_table, ht_key);
+                }
 
-				// Disown the device if it has been remounted
-				if (dev) {
-					const char *ht_key = udev_device_get_devnode(dev->dev);
+                break;
 
-					g_hash_table_remove(g_dev_table, ht_key);
-				}
+            case MNT_TABDIFF_REMOUNT:
+            case MNT_TABDIFF_MOVE:
+                dev = device_search (mnt_fs_get_source (old));
 
-				break;
-		}
-	}
+                // Disown the device if it has been remounted
+                if (dev) {
+                    const char *ht_key = udev_device_get_devnode (dev->dev);
 
-	mnt_free_iter(it);
-	mnt_free_tabdiff(diff);
+                    g_hash_table_remove (g_dev_table, ht_key);
+                }
 
-	// We're done diffing, replace the old table
-	mnt_free_table(g_mtab);
-	g_mtab = new_tab;
+                break;
+        }
+    }
+
+    mnt_free_iter (it);
+    mnt_free_tabdiff (diff);
+
+    // We're done diffing, replace the old table
+    mnt_free_table (g_mtab);
+    g_mtab = new_tab;
 }
 
 void
 mount_plugged_devices (struct udev *udev)
 {
-	struct udev_enumerate *udev_enum;
-	struct udev_list_entry *devices;
-	struct udev_list_entry *entry;
-	struct udev_device *dev;
-	const char *path;
+    struct udev_enumerate *udev_enum;
+    struct udev_list_entry *devices;
+    struct udev_list_entry *entry;
+    struct udev_device *dev;
+    const char *path;
 
-	udev_enum = udev_enumerate_new(udev);
-	udev_enumerate_add_match_subsystem(udev_enum, "block");
-	udev_enumerate_scan_devices(udev_enum);
-	devices = udev_enumerate_get_list_entry(udev_enum);
+    udev_enum = udev_enumerate_new (udev);
+    udev_enumerate_add_match_subsystem (udev_enum, "block");
+    udev_enumerate_scan_devices (udev_enum);
+    devices = udev_enumerate_get_list_entry (udev_enum);
 
-	udev_list_entry_foreach(entry, devices) {
-		path = udev_list_entry_get_name(entry);
-		dev = udev_device_new_from_syspath(udev, path);
+    udev_list_entry_foreach (entry, devices) {
+        path = udev_list_entry_get_name (entry);
+        dev = udev_device_new_from_syspath (udev, path);
 
-		if (!table_search_by_udev(g_mtab, dev))
-			on_udev_add(dev);
+        if (!table_search_by_udev (g_mtab, dev)) {
+            on_udev_add (dev);
+        }
 
-		udev_device_unref(dev);
-	}
-	udev_enumerate_unref(udev_enum);
+        udev_device_unref (dev);
+    }
+    udev_enumerate_unref (udev_enum);
 }
 
 void
 sig_handler (int signal)
 {
-	if (signal == SIGINT || signal == SIGTERM || signal == SIGHUP)
-		g_running = 0;
+    if (signal == SIGINT || signal == SIGTERM || signal == SIGHUP) {
+        g_running = 0;
+    }
 }
 
 int
 daemonize (void)
 {
-	pid_t child_pid;
+    pid_t child_pid;
 
-	child_pid = fork();
+    child_pid = fork();
 
-	if (child_pid < 0)
-		return 0;
+    if (child_pid < 0) {
+        return 0;
+    }
 
-	if (child_pid > 0)
-		exit(EXIT_SUCCESS);
+    if (child_pid > 0) {
+        exit (EXIT_SUCCESS);
+    }
 
-	if (chdir("/") < 0) {
-		perror("chdir");
-		return 0;
-	}
+    if (chdir ("/") < 0) {
+        perror ("chdir");
+        return 0;
+    }
 
-	umask(022);
+    umask (022);
 
-	if (setsid() < 0) {
-		perror("setsid");
-		return 0;
-	}
+    if (setsid() < 0) {
+        perror ("setsid");
+        return 0;
+    }
 
-	// Close std* descriptors
-	close(0);
-	close(1);
-	close(2);
+    // Close std* descriptors
+    close (0);
+    close (1);
+    close (2);
 
-	return 1;
+    return 1;
 }
 
 int
 ipc_serve (int client)
 {
-	char msg_buffer[4096];
-	ssize_t r;
+    char msg_buffer[4096];
+    ssize_t r;
 
-	if (client < 0)
-		return 0;
+    if (client < 0) {
+        return 0;
+    }
 
-	r = read(client, msg_buffer, sizeof(msg_buffer));
-	if (r < 0) {
-		perror("read");
-		return 0;
-	}
-	msg_buffer[r] = '\0';
+    r = read (client, msg_buffer, sizeof (msg_buffer));
 
-	if (r < 1) {
-		syslog(LOG_WARNING, "Malformed ipc command of length %zu", r);
-		return 0;
-	}
+    if (r < 0) {
+        perror ("read");
+        return 0;
+    }
 
-	switch (msg_buffer[0]) {
-		case 'R': { // Remove a mounted device
-			// Resolve the user-provided path
-			char *res = realpath(msg_buffer + 1, NULL);
+    msg_buffer[r] = '\0';
 
-			if (!res) {
-				perror("realpath");
-				ipc_sendf(client, "-");
-				return 0;
-			}
+    if (r < 1) {
+        syslog (LOG_WARNING, "Malformed ipc command of length %zu", r);
+        return 0;
+    }
 
-			Device *dev = device_search(res);
-			free(res);
+    switch (msg_buffer[0]) {
+        case 'R': { // Remove a mounted device
+                // Resolve the user-provided path
+                char *res = realpath (msg_buffer + 1, NULL);
 
-			int ok = 0;
-			// We don't have to check whether the device is mounted here since device_unmount takes care
-			// of stale device entries
-			if (dev) {
-				const char *ht_key = udev_device_get_devnode(dev->dev);
+                if (!res) {
+                    perror ("realpath");
+                    ipc_sendf (client, "-");
+                    return 0;
+                }
 
-				if (device_unmount(dev)) {
-					g_hash_table_remove(g_dev_table, ht_key);
-					ok = 1;
-				}
-			}
+                Device *dev = device_search (res);
+                free (res);
 
-			// Send the response back
-			ipc_sendf(client, "%c", ok? '+': '-');
+                int ok = 0;
 
-			return 1;
-		}
+                // We don't have to check whether the device is mounted here since device_unmount takes care
+                // of stale device entries
+                if (dev) {
+                    const char *ht_key = udev_device_get_devnode (dev->dev);
 
-		case 'L': { // List the mounted devices
-			GHashTableIter it;
-			char *node;
-			Device *dev;
+                    if (device_unmount (dev)) {
+                        g_hash_table_remove (g_dev_table, ht_key);
+                        ok = 1;
+                    }
+                }
 
-			g_hash_table_iter_init(&it, g_dev_table);
+                // Send the response back
+                ipc_sendf (client, "%c", ok ? '+' : '-');
 
-			while (g_hash_table_iter_next(&it, (gpointer)&node, (gpointer)&dev)) {
-				// Print the volume information like this
-				// v <node> <fs> <mountpoint>
-				if (dev->type == VOLUME) {
-					ipc_sendf(client, "v \"%s\" \"%s\" \"%s\"\n", dev->node, dev->fs, dev->mp);
-				}
-			}
+                return 1;
+            }
 
-			// Send an empty line to mark the end of the list
-			ipc_sendf(client, "\n");
+        case 'L': { // List the mounted devices
+                GHashTableIter it;
+                char *node;
+                Device *dev;
 
-			return 1;
-		}
-	}
+                g_hash_table_iter_init (&it, g_dev_table);
 
-	syslog(LOG_WARNING, "Unrecognized ipc command %c", msg_buffer[0]);
+                while (g_hash_table_iter_next (&it, (gpointer)&node, (gpointer)&dev)) {
+                    // Print the volume information like this
+                    // v <node> <fs> <mountpoint>
+                    if (dev->type == VOLUME) {
+                        ipc_sendf (client, "v \"%s\" \"%s\" \"%s\"\n", dev->node, dev->fs, dev->mp);
+                    }
+                }
 
-	return 0;
+                // Send an empty line to mark the end of the list
+                ipc_sendf (client, "\n");
+
+                return 1;
+            }
+    }
+
+    syslog (LOG_WARNING, "Unrecognized ipc command %c", msg_buffer[0]);
+
+    return 0;
 }
 
 void device_clear_list () {
-	GHashTableIter it;
-	Device *dev;
+    GHashTableIter it;
+    Device *dev;
 
-	g_hash_table_iter_init(&it, g_dev_table);
-	while (g_hash_table_iter_next(&it, NULL, (gpointer)&dev)) {
-		device_unmount(dev);
-	}
-	g_hash_table_destroy(g_dev_table);
+    g_hash_table_iter_init (&it, g_dev_table);
+
+    while (g_hash_table_iter_next (&it, NULL, (gpointer)&dev)) {
+        device_unmount (dev);
+    }
+
+    g_hash_table_destroy (g_dev_table);
 }
 
 int
 parse_mask (char *args, unsigned long *mask)
 {
-	unsigned long tmp;
+    unsigned long tmp;
 
-	tmp = 0;
+    tmp = 0;
 
-	if (args[0] != '0') {
-		// format : rwxrwxrwx
-		if (strlen(args) != 9)
-			return 0;
+    if (args[0] != '0') {
+        // format : rwxrwxrwx
+        if (strlen (args) != 9) {
+            return 0;
+        }
 
-		for (int i = 0; i < 9; i++) {
-			if (!strchr("rwx-", args[i])) {
-				fprintf(stderr, "Stray '%c' character in the mask", args[i]);
-				return 0;
-			}
-			tmp <<= 1;
-			tmp |= (args[i] != '-')? 1: 0;
-		}
-	}
-	else {
-		// format : 0000
-		if (strlen(args) != 4)
-			return 0;
+        for (int i = 0; i < 9; i++) {
+            if (!strchr ("rwx-", args[i])) {
+                fprintf (stderr, "Stray '%c' character in the mask", args[i]);
+                return 0;
+            }
 
-		errno = 0;
-		tmp = strtoul(args, NULL, 8);
-		if (errno) {
-			perror("strtoul");
-			return 0;
-		}
-	}
+            tmp <<= 1;
+            tmp |= (args[i] != '-') ? 1 : 0;
+        }
+    }
+    else {
+        // format : 0000
+        if (strlen (args) != 4) {
+            return 0;
+        }
 
-	*mask = (unsigned)tmp;
+        errno = 0;
+        tmp = strtoul (args, NULL, 8);
 
-	return 1;
+        if (errno) {
+            perror ("strtoul");
+            return 0;
+        }
+    }
+
+    *mask = (unsigned)tmp;
+
+    return 1;
 }
 
 int
 map_user_to_id (char *username)
 {
-	struct passwd *pw;
+    struct passwd *pw;
 
-	errno = 0;
-	pw = getpwnam(username);
+    errno = 0;
+    pw = getpwnam (username);
 
-	// The 'Return Value' section states that getpwnam() returns NULL "if the
-	// matching entry is not found or an error occurs. If an error occurs, errno
-	// is set appropriately"
-	if (!pw) {
-		if (errno)
-			perror("getpwnam");
-		else
-			fprintf(stderr, "Could not find any information about the user \"%s\"\n", username);
+    // The 'Return Value' section states that getpwnam() returns NULL "if the
+    // matching entry is not found or an error occurs. If an error occurs, errno
+    // is set appropriately"
+    if (!pw) {
+        if (errno) {
+            perror ("getpwnam");
+        }
+        else {
+            fprintf (stderr, "Could not find any information about the user \"%s\"\n", username);
+        }
 
-		return 0;
-	}
+        return 0;
+    }
 
-	g_gid = pw->pw_gid;
-	g_uid = pw->pw_uid;
+    g_gid = pw->pw_gid;
+    g_uid = pw->pw_uid;
 
-	return 1;
+    return 1;
 }
 
 int
 main (int argc, char *argv[])
 {
-	struct udev *udev;
-	struct udev_monitor *monitor;
-	struct udev_device *device;
-	const char *action;
-	struct pollfd pollfd[3];  // udev /  mtab / fifo
-	char *resolved;
-	int opt, got_u, daemon;
-	int ipc_fd, mtab_fd;
+    struct udev *udev;
+    struct udev_monitor *monitor;
+    struct udev_device *device;
+    const char *action;
+    struct pollfd pollfd[3];  // udev /  mtab / fifo
+    char *resolved;
+    int opt, got_u, daemon;
+    int ipc_fd, mtab_fd;
 
-	ipc_fd = mtab_fd = -1;
-	daemon = 0;
-	got_u = 0;
-	g_callback_cmd = NULL;
+    ipc_fd = mtab_fd = -1;
+    daemon = 0;
+    got_u = 0;
+    g_callback_cmd = NULL;
 
-	g_mask.fmask = 0133;
-	g_mask.dmask = 0022;
+    g_mask.fmask = 0133;
+    g_mask.dmask = 0022;
 
-	while ((opt = getopt(argc, argv, "hdu:p:c:m:")) != -1) {
-		switch (opt) {
-			case 'd':
-				daemon = 1;
-				break;
-			case 'u':
-				if (!map_user_to_id(optarg))
-					return EXIT_FAILURE;
-				got_u = 1;
-				break;
-			case 'm':
-				{
-					char *sep = strchr(optarg, ',');
+    while ((opt = getopt (argc, argv, "hdu:p:c:m:")) != -1) {
+        switch (opt) {
+            case 'd':
+                daemon = 1;
+                break;
 
-					if (!sep) {
-						if (!parse_mask(optarg, &g_mask.fmask)) {
-							fprintf(stderr, "Invalid mask specified!\n");
-							return EXIT_FAILURE;
-						}
-						// The user specified a single mask, use that as umask
-						g_mask.dmask = g_mask.fmask;
-					}
-					else {
-						*sep++ = '\0';
-						// The user specified two distinct masks
-						if (!parse_mask(optarg, &g_mask.fmask) || !parse_mask(sep, &g_mask.dmask)) {
-							fprintf(stderr, "Invalid mask specified!\n");
-							return EXIT_FAILURE;
-						}
-					}
-				}
-				break;
-			case 'p':
-			case 'c':
-				if (optarg[0] == '\0') {
-					fprintf(stderr, "Cannot pass empty argument to -%c\n", opt);
-					return EXIT_FAILURE;
-				}
-				if (opt == 'p') {
-					g_mount_path = strdup(optarg);
-				}
-				else {
-					g_callback_cmd = strdup(optarg);
-				}
-				break;
-			case 'h':
-				printf("ldm "VERSION_STR"\n");
-				printf("2011-2019 (C) The Lemon Man\nAdded the only one strcmp() by me)) in 2024\n");
-				printf("%s [-d | -r | -u | -p | -c | -m | -h]\n", argv[0]);
-				printf("\t-d Run ldm as a daemon\n");
-				printf("\t-u Specify the user\n");
-				printf("\t-m Specify the umask or the fmask/dmask\n");
-				printf("\t-p Specify where to mount the devices\n");
-				printf("\t-c Specify the path to the script executed after mount/unmount events\n");
-				printf("\t-h Show this help\n");
-				// Falltrough
-			default:
-				return EXIT_SUCCESS;
-		}
-	}
+            case 'u':
+                if (!map_user_to_id (optarg)) {
+                    return EXIT_FAILURE;
+                }
 
-	if (getuid() != 0) {
-		fprintf(stderr, "You have to run this program as root!\n");
-		return EXIT_FAILURE;
-	}
+                got_u = 1;
+                break;
 
-	if (g_file_test(LOCK_PATH, G_FILE_TEST_EXISTS)) {
-		fprintf(stderr, "ldm is already running!\n");
-		return EXIT_SUCCESS;
-	}
+            case 'm':
+                {
+                    char *sep = strchr (optarg, ',');
 
-	if (!got_u) {
-		fprintf(stderr, "You must supply the user with the -u switch!\n");
-		return EXIT_FAILURE;
-	}
+                    if (!sep) {
+                        if (!parse_mask (optarg, &g_mask.fmask)) {
+                            fprintf (stderr, "Invalid mask specified!\n");
+                            return EXIT_FAILURE;
+                        }
 
-	if (g_callback_cmd && !g_file_test(g_callback_cmd, G_FILE_TEST_IS_EXECUTABLE)) {
-		fprintf(stderr, "The callback script isn't executable!\n");
+                        // The user specified a single mask, use that as umask
+                        g_mask.dmask = g_mask.fmask;
+                    }
+                    else {
+                        *sep++ = '\0';
 
-		free(g_callback_cmd);
-		g_callback_cmd = NULL;
-	}
+                        // The user specified two distinct masks
+                        if (!parse_mask (optarg, &g_mask.fmask) || !parse_mask (sep, &g_mask.dmask)) {
+                            fprintf (stderr, "Invalid mask specified!\n");
+                            return EXIT_FAILURE;
+                        }
+                    }
+                }
+                break;
 
-	if (!g_mount_path)
-		g_mount_path = strdup("/mnt");
+            case 'p':
+            case 'c':
+                if (optarg[0] == '\0') {
+                    fprintf (stderr, "Cannot pass empty argument to -%c\n", opt);
+                    return EXIT_FAILURE;
+                }
 
-	// Resolve the mount point path before using it
-	resolved = realpath(g_mount_path, NULL);
-	if (!resolved) {
-		// Print a nice warning if the path doesn't exist
-		if (errno == ENOENT)
-		    fprintf(stderr, "The path \"%s\" doesn't name an existing folder!\n", g_mount_path);
-		else
-		    perror("realpath()");
-		return EXIT_FAILURE;
-	}
-	free(g_mount_path);
-	g_mount_path = resolved;
+                if (opt == 'p') {
+                    g_mount_path = strdup (optarg);
+                }
+                else {
+                    g_callback_cmd = strdup (optarg);
+                }
 
-	// Check anyways
-	if (!g_file_test(g_mount_path, G_FILE_TEST_IS_DIR)) {
-		fprintf(stderr, "The path \"%s\" doesn't name a folder or doesn't exist!\n", g_mount_path);
+                break;
 
-		free(g_callback_cmd);
-		free(g_mount_path);
+            case 'h':
+                printf ("ldm "VERSION_STR"\n");
+                printf ("2011-2019 (C) The Lemon Man\nAdded the only one strcmp() by me)) in 2024\n");
+                printf ("%s [-d | -r | -u | -p | -c | -m | -h]\n", argv[0]);
+                printf ("\t-d Run ldm as a daemon\n");
+                printf ("\t-u Specify the user\n");
+                printf ("\t-m Specify the umask or the fmask/dmask\n");
+                printf ("\t-p Specify where to mount the devices\n");
+                printf ("\t-c Specify the path to the script executed after mount/unmount events\n");
+                printf ("\t-h Show this help\n");
 
-		return EXIT_FAILURE;
-	}
+            // Falltrough
+            default:
+                return EXIT_SUCCESS;
+        }
+    }
 
-	// Create the ipc socket
-	umask(0);
+    if (getuid() != 0) {
+        fprintf (stderr, "You have to run this program as root!\n");
+        return EXIT_FAILURE;
+    }
 
-	if (daemon && !daemonize()) {
-		fprintf(stderr, "Could not spawn the daemon!\n");
-		return EXIT_FAILURE;
-	}
+    if (g_file_test (LOCK_PATH, G_FILE_TEST_EXISTS)) {
+        fprintf (stderr, "ldm is already running!\n");
+        return EXIT_SUCCESS;
+    }
 
-	lock_create(getpid());
+    if (!got_u) {
+        fprintf (stderr, "You must supply the user with the -u switch!\n");
+        return EXIT_FAILURE;
+    }
 
-	openlog("ldm", LOG_CONS, LOG_DAEMON);
+    if (g_callback_cmd && !g_file_test (g_callback_cmd, G_FILE_TEST_IS_EXECUTABLE)) {
+        fprintf (stderr, "The callback script isn't executable!\n");
 
-	signal(SIGTERM, sig_handler);
-	signal(SIGINT , sig_handler);
-	signal(SIGHUP , sig_handler);
+        free (g_callback_cmd);
+        g_callback_cmd = NULL;
+    }
 
-	syslog(LOG_INFO, "ldm "VERSION_STR);
+    if (!g_mount_path) {
+        g_mount_path = strdup ("/mnt");
+    }
 
-	// Create the udev struct/monitor
-	udev = udev_new();
-	monitor = udev_monitor_new_from_netlink(udev, "udev");
+    // Resolve the mount point path before using it
+    resolved = realpath (g_mount_path, NULL);
 
-	if (!monitor) {
-		syslog(LOG_ERR, "Cannot create a new monitor");
-		goto cleanup;
-	}
-	if (udev_monitor_filter_add_match_subsystem_devtype(monitor, "block", NULL)) {
-		syslog(LOG_ERR, "Cannot set the filter");
-		goto cleanup;
-	}
+    if (!resolved) {
+        // Print a nice warning if the path doesn't exist
+        if (errno == ENOENT) {
+            fprintf (stderr, "The path \"%s\" doesn't name an existing folder!\n", g_mount_path);
+        }
+        else {
+            perror ("realpath()");
+        }
 
-	// Create the hashtable holding the mounted devices
-	g_dev_table = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, (GDestroyNotify)device_free);
+        return EXIT_FAILURE;
+    }
 
-	// Load the tables
-	g_fstab = mnt_new_table_from_file(FSTAB_PATH);
-	g_mtab = mnt_new_table_from_file(MTAB_PATH);
+    syslog (LOG_INFO, "g_mount_path:%s resolved:%s", g_mount_path, resolved);
+    free (g_mount_path);
+    g_mount_path = resolved;
 
-	if (!g_fstab || !g_mtab) {
-		fprintf(stderr, "Could not parse the fstab/mtab\n");
-		goto cleanup;
-	}
+    const char *home = mnt_get_mtab_path();
+    syslog (LOG_INFO, "home mounted:%s", home);
 
-	mount_plugged_devices(udev);
+    // Check anyways
+    if (!g_file_test (g_mount_path, G_FILE_TEST_IS_DIR)) {
+        fprintf (stderr, "The path \"%s\" doesn't name a folder or doesn't exist!\n", g_mount_path);
 
-	mnt_free_table(g_mtab);
-	g_mtab = mnt_new_table_from_file(MTAB_PATH);
+        free (g_callback_cmd);
+        free (g_mount_path);
 
-	// Setup the fd to poll
-	mtab_fd = open(MTAB_PATH, O_RDONLY);
-	if (mtab_fd < 0) {
-		perror("open");
-		goto cleanup;
-	}
+        return EXIT_FAILURE;
+    }
 
-	ipc_fd = ipc_init(1);
-	if (ipc_fd < 0)
-		goto cleanup;
+    // Create the ipc socket
+    umask (0);
 
-	if (listen(ipc_fd, 1) < 0) {
-		perror("listen");
-		goto cleanup;
-	}
+    if (daemon && !daemonize()) {
+        fprintf (stderr, "Could not spawn the daemon!\n");
+        return EXIT_FAILURE;
+    }
 
-	// Register all the events
-	pollfd[0].fd = udev_monitor_get_fd(monitor);
-	pollfd[0].events = POLLIN;
+    lock_create (getpid());
 
-	pollfd[1].fd = mtab_fd;
-	pollfd[1].events = 0;
+    openlog ("ldm", LOG_CONS, LOG_DAEMON);
 
-	pollfd[2].fd = ipc_fd;
-	pollfd[2].events = POLLIN;
+    signal (SIGTERM, sig_handler);
+    signal (SIGINT, sig_handler);
+    signal (SIGHUP, sig_handler);
 
-	// Enable receiving now, we're ready to process the incoming events
-	if (udev_monitor_enable_receiving(monitor)) {
-		syslog(LOG_ERR, "Cannot enable receiving");
-		goto cleanup;
-	}
+    syslog (LOG_INFO, "ldm "VERSION_STR);
 
-	syslog(LOG_INFO, "Entering the main loop");
+    // Create the udev struct/monitor
+    udev = udev_new();
+    monitor = udev_monitor_new_from_netlink (udev, "udev");
 
-	g_running = 1;
+    if (!monitor) {
+        syslog (LOG_ERR, "Cannot create a new monitor");
+        goto cleanup;
+    }
 
-	while (g_running) {
-		if (poll(pollfd, 3, -1) < 1)
-			continue;
+    if (udev_monitor_filter_add_match_subsystem_devtype (monitor, "block", NULL)) {
+        syslog (LOG_ERR, "Cannot set the filter");
+        goto cleanup;
+    }
 
-		// Incoming message on udev socket
-		if (pollfd[0].revents & POLLIN) {
-			device = udev_monitor_receive_device(monitor);
+    // Create the hashtable holding the mounted devices
+    g_dev_table = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, (GDestroyNotify)device_free);
 
-			if (!device)
-				continue;
+    // Load the tables
+    g_fstab = mnt_new_table_from_file (FSTAB_PATH);
+    g_mtab = mnt_new_table_from_file (MTAB_PATH);
 
-			action = udev_device_get_action(device);
+    if (!g_fstab || !g_mtab) {
+        fprintf (stderr, "Could not parse the fstab/mtab\n");
+        goto cleanup;
+    }
 
-			if (!strcmp(action, "add")) {
-				on_udev_add(device);
-			}
-			else if (!strcmp(action, "remove")) {
-				on_udev_remove(device);
-			}
-			else if (!strcmp(action, "change")) {
-				on_udev_change(device);
-			}
+    mount_plugged_devices (udev);
 
-			udev_device_unref(device);
-		}
-		// mtab change
-		if (pollfd[1].revents & POLLERR) {
-			on_mtab_change();
-		}
-		// client connection to the ipc socket
-		if (pollfd[2].revents & POLLIN) {
-			int client;
+    mnt_free_table (g_mtab);
+    g_mtab = mnt_new_table_from_file (MTAB_PATH);
 
-			client = accept(ipc_fd, NULL, NULL);
-			if (client < 0) {
-				perror("accept");
-				continue;
-			}
+    // Setup the fd to poll
+    mtab_fd = open (MTAB_PATH, O_RDONLY);
 
-			if (!ipc_serve(client))
-				syslog(LOG_ERR, "Could not serve a client due to an error");
+    if (mtab_fd < 0) {
+        perror ("open");
+        goto cleanup;
+    }
 
-			close(client);
-		}
-	}
+    ipc_fd = ipc_init (1);
+
+    if (ipc_fd < 0) {
+        goto cleanup;
+    }
+
+    if (listen (ipc_fd, 1) < 0) {
+        perror ("listen");
+        goto cleanup;
+    }
+
+    // Register all the events
+    pollfd[0].fd = udev_monitor_get_fd (monitor);
+    pollfd[0].events = POLLIN;
+
+    pollfd[1].fd = mtab_fd;
+    pollfd[1].events = 0;
+
+    pollfd[2].fd = ipc_fd;
+    pollfd[2].events = POLLIN;
+
+    // Enable receiving now, we're ready to process the incoming events
+    if (udev_monitor_enable_receiving (monitor)) {
+        syslog (LOG_ERR, "Cannot enable receiving");
+        goto cleanup;
+    }
+
+    syslog (LOG_INFO, "Entering the main loop");
+
+    g_running = 1;
+
+    while (g_running) {
+        if (poll (pollfd, 3, -1) < 1) {
+            continue;
+        }
+
+        // Incoming message on udev socket
+        if (pollfd[0].revents & POLLIN) {
+            device = udev_monitor_receive_device (monitor);
+
+            if (!device) {
+                continue;
+            }
+
+            action = udev_device_get_action (device);
+
+            if (!strcmp (action, "add")) {
+                on_udev_add (device);
+            }
+            else if (!strcmp (action, "remove")) {
+                on_udev_remove (device);
+            }
+            else if (!strcmp (action, "change")) {
+                on_udev_change (device);
+            }
+
+            udev_device_unref (device);
+        }
+
+        // mtab change
+        if (pollfd[1].revents & POLLERR) {
+            on_mtab_change();
+        }
+
+        // client connection to the ipc socket
+        if (pollfd[2].revents & POLLIN) {
+            int client;
+
+            client = accept (ipc_fd, NULL, NULL);
+
+            if (client < 0) {
+                perror ("accept");
+                continue;
+            }
+
+            if (!ipc_serve (client)) {
+                syslog (LOG_ERR, "Could not serve a client due to an error");
+            }
+
+            close (client);
+        }
+    }
 
 cleanup:
 
-	device_clear_list ();
+    device_clear_list ();
 
-	free(g_callback_cmd);
-	free(g_mount_path);
+    free (g_callback_cmd);
+    free (g_mount_path);
 
-	// Do the cleanup
-	ipc_deinit (ipc_fd);
+    // Do the cleanup
+    ipc_deinit (ipc_fd);
 
-	close(mtab_fd);
+    close (mtab_fd);
 
-	unlink(LOCK_PATH);
+    unlink (LOCK_PATH);
 
-	udev_monitor_unref(monitor);
-	udev_unref(udev);
+    udev_monitor_unref (monitor);
+    udev_unref (udev);
 
-	mnt_free_table(g_fstab);
-	mnt_free_table(g_mtab);
+    mnt_free_table (g_fstab);
+    mnt_free_table (g_mtab);
 
-	syslog(LOG_INFO, "Terminating...");
+    syslog (LOG_INFO, "Terminating...");
 
-	return EXIT_SUCCESS;
+    return EXIT_SUCCESS;
 }
